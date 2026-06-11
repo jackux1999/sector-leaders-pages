@@ -10,17 +10,17 @@
       theme: {
         extend: {
           colors: {
-            ink: "#0d1117",
-            panel: "#151a22",
-            panel2: "#1d2430",
-            line: "#2b3442",
-            muted: "#96a1b2",
-            rise: "#ff5c70",
-            fall: "#31c48d",
-            gold: "#f6c05f"
+            ink: "#f5f7fb",
+            panel: "#ffffff",
+            panel2: "#f8fafc",
+            line: "#e5e7eb",
+            muted: "#64748b",
+            rise: "#e11d48",
+            fall: "#059669",
+            gold: "#f59e0b"
           },
           boxShadow: {
-            soft: "0 18px 50px rgba(0,0,0,.28)"
+            soft: "0 12px 34px rgba(15,23,42,.08)"
           }
         }
       }
@@ -28,35 +28,35 @@
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen bg-ink text-slate-100 antialiased">
-  <div class="min-h-screen bg-[radial-gradient(circle_at_18%_8%,rgba(74,144,226,.18),transparent_28%),linear-gradient(135deg,#0d1117_0%,#111827_52%,#0d1117_100%)]">
+<body class="min-h-screen bg-ink text-slate-950 antialiased">
+  <div class="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)]">
     <div class="mx-auto grid min-h-screen w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside class="border-b border-line/80 bg-ink/80 p-4 backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:p-5">
+      <aside class="border-b border-line bg-white/85 p-4 backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:p-5">
         <div class="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h1 class="text-base font-semibold tracking-normal text-white">A股板块龙头榜</h1>
+            <h1 class="text-base font-semibold tracking-normal text-slate-950">A股板块龙头榜</h1>
             <p id="tradeDate" class="mt-1 text-xs leading-5 text-muted"></p>
           </div>
           <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-fall shadow-[0_0_0_6px_rgba(49,196,141,.12)]"></span>
         </div>
 
-        <section class="mb-4 grid gap-3 rounded-lg border border-line bg-panel/90 p-3 shadow-soft">
+        <section class="mb-4 grid gap-3 rounded-lg border border-line bg-white p-3 shadow-soft">
           <label class="grid gap-1.5 text-xs text-muted">
             搜索板块/股票
-            <input id="search" class="h-9 rounded-md border border-line bg-slate-950/70 px-3 text-sm text-slate-100 outline-none transition focus:border-blue-400" type="search" placeholder="MLCC、锂电、机器人">
+            <input id="search" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white" type="search" placeholder="MLCC、锂电、机器人">
           </label>
 
           <div class="grid gap-1.5">
             <span class="text-xs text-muted">龙头口径</span>
-            <div class="grid grid-cols-2 overflow-hidden rounded-md border border-line bg-slate-950/70 text-sm">
-              <button id="modeTrading" class="h-9 bg-blue-400 font-semibold text-slate-950" type="button">交易</button>
-              <button id="modeIndustry" class="h-9 text-muted transition hover:text-white" type="button">产业</button>
+            <div class="grid grid-cols-2 overflow-hidden rounded-md border border-line bg-slate-50 text-sm">
+              <button id="modeTrading" class="h-9 bg-slate-950 font-semibold text-white" type="button">交易</button>
+              <button id="modeIndustry" class="h-9 text-muted transition hover:bg-white hover:text-slate-950" type="button">产业</button>
             </div>
           </div>
 
           <label class="grid gap-1.5 text-xs text-muted">
             板块排序
-            <select id="sortBy" class="h-9 rounded-md border border-line bg-slate-950/70 px-3 text-sm text-slate-100 outline-none transition focus:border-blue-400">
+            <select id="sortBy" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white">
               <option value="heat">综合热度</option>
               <option value="change">今日涨幅</option>
               <option value="amount">成交额</option>
@@ -68,49 +68,62 @@
       </aside>
 
       <main class="p-4 lg:p-6">
+        <section class="mb-4 grid gap-3 rounded-lg border border-line bg-white p-3 shadow-soft md:grid-cols-[1fr_auto] md:items-center">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="rounded-md bg-slate-950 px-2.5 py-1 text-xs font-medium text-white">Market Monitor</span>
+            <span class="text-sm font-semibold text-slate-950">主板题材强度观察</span>
+            <span class="text-xs text-muted">数据仅作看盘辅助，不构成投资建议</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span class="rounded-full bg-slate-100 px-2.5 py-1">5分钟刷新</span>
+            <span class="rounded-full bg-slate-100 px-2.5 py-1">龙一到龙五</span>
+            <span class="rounded-full bg-slate-100 px-2.5 py-1">主板过滤</span>
+          </div>
+        </section>
+
         <header class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div class="mb-2 flex flex-wrap items-center gap-2">
-              <h2 id="sectorTitle" class="text-base font-semibold tracking-normal text-white"></h2>
-              <span class="rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted">已排除创业板/科创板</span>
-              <span id="refreshStatus" class="rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted">等待刷新</span>
+              <h2 id="sectorTitle" class="text-base font-semibold tracking-normal text-slate-950"></h2>
+              <span class="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted">已排除创业板/科创板</span>
+              <span id="refreshStatus" class="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted">等待刷新</span>
             </div>
             <p id="sectorSummary" class="max-w-3xl text-sm leading-6 text-muted"></p>
           </div>
-          <span id="ruleChip" class="w-fit rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted"></span>
+          <span id="ruleChip" class="w-fit rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted"></span>
         </header>
 
         <section class="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <div class="rounded-lg border border-line bg-panel/90 p-3">
+          <div class="rounded-lg border border-line bg-white p-3 shadow-soft">
             <p class="text-xs text-muted">板块涨幅</p>
             <strong id="mChange" class="mt-2 block text-base"></strong>
           </div>
-          <div class="rounded-lg border border-line bg-panel/90 p-3">
+          <div class="rounded-lg border border-line bg-white p-3 shadow-soft">
             <p class="text-xs text-muted">板块成交额</p>
-            <strong id="mAmount" class="mt-2 block text-base text-white"></strong>
+            <strong id="mAmount" class="mt-2 block text-base text-slate-950"></strong>
           </div>
-          <div class="rounded-lg border border-line bg-panel/90 p-3">
+          <div class="rounded-lg border border-line bg-white p-3 shadow-soft">
             <p class="text-xs text-muted">涨停数量</p>
-            <strong id="mLimit" class="mt-2 block text-base text-white"></strong>
+            <strong id="mLimit" class="mt-2 block text-base text-slate-950"></strong>
           </div>
-          <div class="rounded-lg border border-line bg-panel/90 p-3">
+          <div class="rounded-lg border border-line bg-white p-3 shadow-soft">
             <p class="text-xs text-muted">入选股票池</p>
-            <strong id="mPool" class="mt-2 block text-base text-white"></strong>
+            <strong id="mPool" class="mt-2 block text-base text-slate-950"></strong>
           </div>
         </section>
 
         <section class="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_360px]">
-          <div class="overflow-hidden rounded-lg border border-line bg-panel/95 shadow-soft">
-            <div class="flex flex-col gap-2 border-b border-line bg-panel2/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="overflow-hidden rounded-lg border border-line bg-white shadow-soft">
+            <div class="flex flex-col gap-2 border-b border-line bg-panel2 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p class="text-sm font-semibold text-white">龙一到龙五</p>
+                <p class="text-sm font-semibold text-slate-950">龙一到龙五</p>
                 <p class="mt-1 text-xs text-muted">涨幅 55% + 成交额 30% + 换手 10% + 涨停 5%</p>
               </div>
               <span class="w-fit rounded-full border border-line px-2.5 py-1 text-xs text-muted">主板股票池</span>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full min-w-[760px] border-collapse text-sm">
-                <thead class="bg-slate-950/40 text-xs text-muted">
+                <thead class="bg-slate-50 text-xs text-muted">
                   <tr>
                     <th class="px-3 py-3 text-left font-medium">排名</th>
                     <th class="px-3 py-3 text-left font-medium">股票</th>
@@ -126,21 +139,21 @@
             </div>
           </div>
 
-          <aside class="rounded-lg border border-line bg-panel/95 shadow-soft">
-            <div class="flex items-center justify-between border-b border-line bg-panel2/70 p-3">
-              <p class="text-sm font-semibold text-white">入选理由</p>
+          <aside class="rounded-lg border border-line bg-white shadow-soft">
+            <div class="flex items-center justify-between border-b border-line bg-panel2 p-3">
+              <p class="text-sm font-semibold text-slate-950">入选理由</p>
               <span id="selectedRank" class="rounded-full border border-line px-2.5 py-1 text-xs text-muted"></span>
             </div>
             <div class="p-4">
-              <h3 id="selectedName" class="text-base font-semibold text-white"></h3>
+              <h3 id="selectedName" class="text-base font-semibold text-slate-950"></h3>
               <p id="selectedCode" class="mt-1 text-xs text-muted"></p>
               <p id="selectedReason" class="mt-4 border-t border-line pt-4 text-sm leading-6 text-muted"></p>
               <div id="scoreGrid" class="mt-4 grid gap-3"></div>
             </div>
             <div class="grid gap-2 border-t border-line p-4 text-xs text-muted">
-              <div class="flex items-center justify-between gap-3"><span>观察一</span><strong class="font-medium text-slate-200">是否继续放量</strong></div>
-              <div class="flex items-center justify-between gap-3"><span>观察二</span><strong class="font-medium text-slate-200">板块是否扩散</strong></div>
-              <div class="flex items-center justify-between gap-3"><span>观察三</span><strong class="font-medium text-slate-200">龙一断板后龙二承接</strong></div>
+              <div class="flex items-center justify-between gap-3"><span>观察一</span><strong class="font-medium text-slate-700">是否继续放量</strong></div>
+              <div class="flex items-center justify-between gap-3"><span>观察二</span><strong class="font-medium text-slate-700">板块是否扩散</strong></div>
+              <div class="flex items-center justify-between gap-3"><span>观察三</span><strong class="font-medium text-slate-700">龙一断板后龙二承接</strong></div>
             </div>
           </aside>
         </section>
@@ -409,12 +422,12 @@
       const list = document.querySelector("#sectorList");
       const items = filteredSectors();
       list.innerHTML = items.map(sector => `
-        <button type="button" data-id="${sector.id}" class="group rounded-lg border p-3 text-left transition ${sector.id === activeSectorId ? "border-blue-400 bg-blue-400/10" : "border-line bg-panel hover:border-blue-400/70 hover:bg-panel2"}">
+        <button type="button" data-id="${sector.id}" class="group rounded-lg border p-3 text-left shadow-sm transition ${sector.id === activeSectorId ? "border-slate-950 bg-slate-950 text-white shadow-soft" : "border-line bg-white hover:border-slate-300 hover:bg-slate-50"}">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-sm font-semibold text-white">${sector.name}</span>
+            <span class="text-sm font-semibold ${sector.id === activeSectorId ? "text-white" : "text-slate-950"}">${sector.name}</span>
             <span class="text-sm font-semibold ${tone(sector.change)}">${fmtPct(sector.change)}</span>
           </div>
-          <div class="mt-2 flex items-center justify-between gap-3 text-xs text-muted">
+          <div class="mt-2 flex items-center justify-between gap-3 text-xs ${sector.id === activeSectorId ? "text-slate-300" : "text-muted"}">
             <span>成交 ${fmtAmount(sector.amount)}</span>
             <span>热度 ${sector.heat || 0}</span>
           </div>
@@ -439,10 +452,10 @@
       document.querySelector("#scoreGrid").innerHTML = items.map(([label, value]) => `
         <div class="grid grid-cols-[52px_minmax(0,1fr)_36px] items-center gap-2 text-xs text-muted">
           <span>${label}</span>
-          <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
-            <span class="block h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-300" style="width:${value}%"></span>
+          <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <span class="block h-full rounded-full bg-slate-950" style="width:${value}%"></span>
           </div>
-          <strong class="text-right font-medium text-slate-200">${value}</strong>
+          <strong class="text-right font-medium text-slate-700">${value}</strong>
         </div>
       `).join("");
     }
@@ -469,19 +482,19 @@
         const rankColor = index === 0 ? "bg-gold text-slate-950" : index === 1 ? "bg-slate-300 text-slate-950" : index === 2 ? "bg-orange-300 text-slate-950" : "bg-slate-700 text-slate-100";
         const value = mode === "trading" ? score(stock) : Number(stock.industryScore || 60);
         return `
-          <tr data-index="${index}" class="cursor-pointer transition hover:bg-blue-400/5">
+          <tr data-index="${index}" class="cursor-pointer transition hover:bg-slate-50">
             <td class="px-3 py-3"><span class="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold ${rankColor}">${index + 1}</span></td>
             <td class="px-3 py-3">
-              <div class="text-sm font-semibold text-white">${stock.name}</div>
+              <div class="text-sm font-semibold text-slate-950">${stock.name}</div>
               <div class="mt-1 text-xs text-muted">${stock.code} · ${rankName}</div>
             </td>
             <td class="px-3 py-3 text-sm font-semibold ${tone(stock.change)}">${fmtPct(stock.change)}</td>
-            <td class="px-3 py-3 text-sm text-slate-200">${fmtAmount(stock.amount)}</td>
-            <td class="px-3 py-3 text-sm text-slate-200">${Number(stock.turnover || 0).toFixed(1)}%</td>
+            <td class="px-3 py-3 text-sm text-slate-700">${fmtAmount(stock.amount)}</td>
+            <td class="px-3 py-3 text-sm text-slate-700">${Number(stock.turnover || 0).toFixed(1)}%</td>
             <td class="px-3 py-3"><span class="rounded-full border border-line px-2 py-1 text-xs text-muted">${stock.limit ? "涨停" : "趋势"}</span></td>
             <td class="px-3 py-3">
-              <div class="h-1.5 w-28 overflow-hidden rounded-full bg-slate-800">
-                <span class="block h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-300" style="width:${value}%"></span>
+              <div class="h-1.5 w-28 overflow-hidden rounded-full bg-slate-100">
+                <span class="block h-full rounded-full bg-slate-950" style="width:${value}%"></span>
               </div>
             </td>
           </tr>
@@ -515,15 +528,15 @@
     document.querySelector("#modeTrading").addEventListener("click", () => {
       mode = "trading";
       selectedIndex = 0;
-      document.querySelector("#modeTrading").className = "h-9 bg-blue-400 font-semibold text-slate-950";
-      document.querySelector("#modeIndustry").className = "h-9 text-muted transition hover:text-white";
+      document.querySelector("#modeTrading").className = "h-9 bg-slate-950 font-semibold text-white";
+      document.querySelector("#modeIndustry").className = "h-9 text-muted transition hover:bg-white hover:text-slate-950";
       render();
     });
     document.querySelector("#modeIndustry").addEventListener("click", () => {
       mode = "industry";
       selectedIndex = 0;
-      document.querySelector("#modeIndustry").className = "h-9 bg-blue-400 font-semibold text-slate-950";
-      document.querySelector("#modeTrading").className = "h-9 text-muted transition hover:text-white";
+      document.querySelector("#modeIndustry").className = "h-9 bg-slate-950 font-semibold text-white";
+      document.querySelector("#modeTrading").className = "h-9 text-muted transition hover:bg-white hover:text-slate-950";
       render();
     });
 
