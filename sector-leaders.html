@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A股板块龙头榜</title>
+  <script>
+    window.tailwind = window.tailwind || {};
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#0d1117",
+            panel: "#151a22",
+            panel2: "#1d2430",
+            line: "#2b3442",
+            muted: "#96a1b2",
+            rise: "#ff5c70",
+            fall: "#31c48d",
+            gold: "#f6c05f"
+          },
+          boxShadow: {
+            soft: "0 18px 50px rgba(0,0,0,.28)"
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-ink text-slate-100 antialiased">
+  <div class="min-h-screen bg-[radial-gradient(circle_at_18%_8%,rgba(74,144,226,.18),transparent_28%),linear-gradient(135deg,#0d1117_0%,#111827_52%,#0d1117_100%)]">
+    <div class="mx-auto grid min-h-screen w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <aside class="border-b border-line/80 bg-ink/80 p-4 backdrop-blur lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:p-5">
+        <div class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 class="text-base font-semibold tracking-normal text-white">A股板块龙头榜</h1>
+            <p id="tradeDate" class="mt-1 text-xs leading-5 text-muted"></p>
+          </div>
+          <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-fall shadow-[0_0_0_6px_rgba(49,196,141,.12)]"></span>
+        </div>
+
+        <section class="mb-4 grid gap-3 rounded-lg border border-line bg-panel/90 p-3 shadow-soft">
+          <label class="grid gap-1.5 text-xs text-muted">
+            搜索板块/股票
+            <input id="search" class="h-9 rounded-md border border-line bg-slate-950/70 px-3 text-sm text-slate-100 outline-none transition focus:border-blue-400" type="search" placeholder="MLCC、锂电、机器人">
+          </label>
+
+          <div class="grid gap-1.5">
+            <span class="text-xs text-muted">龙头口径</span>
+            <div class="grid grid-cols-2 overflow-hidden rounded-md border border-line bg-slate-950/70 text-sm">
+              <button id="modeTrading" class="h-9 bg-blue-400 font-semibold text-slate-950" type="button">交易</button>
+              <button id="modeIndustry" class="h-9 text-muted transition hover:text-white" type="button">产业</button>
+            </div>
+          </div>
+
+          <label class="grid gap-1.5 text-xs text-muted">
+            板块排序
+            <select id="sortBy" class="h-9 rounded-md border border-line bg-slate-950/70 px-3 text-sm text-slate-100 outline-none transition focus:border-blue-400">
+              <option value="heat">综合热度</option>
+              <option value="change">今日涨幅</option>
+              <option value="amount">成交额</option>
+            </select>
+          </label>
+        </section>
+
+        <nav id="sectorList" class="grid max-h-[44vh] gap-2 overflow-auto pr-1 lg:max-h-[calc(100vh-238px)]"></nav>
+      </aside>
+
+      <main class="p-4 lg:p-6">
+        <header class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <h2 id="sectorTitle" class="text-base font-semibold tracking-normal text-white"></h2>
+              <span class="rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted">已排除创业板/科创板</span>
+              <span id="refreshStatus" class="rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted">等待刷新</span>
+            </div>
+            <p id="sectorSummary" class="max-w-3xl text-sm leading-6 text-muted"></p>
+          </div>
+          <span id="ruleChip" class="w-fit rounded-full border border-line bg-panel px-2.5 py-1 text-xs text-muted"></span>
+        </header>
+
+        <section class="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div class="rounded-lg border border-line bg-panel/90 p-3">
+            <p class="text-xs text-muted">板块涨幅</p>
+            <strong id="mChange" class="mt-2 block text-base"></strong>
+          </div>
+          <div class="rounded-lg border border-line bg-panel/90 p-3">
+            <p class="text-xs text-muted">板块成交额</p>
+            <strong id="mAmount" class="mt-2 block text-base text-white"></strong>
+          </div>
+          <div class="rounded-lg border border-line bg-panel/90 p-3">
+            <p class="text-xs text-muted">涨停数量</p>
+            <strong id="mLimit" class="mt-2 block text-base text-white"></strong>
+          </div>
+          <div class="rounded-lg border border-line bg-panel/90 p-3">
+            <p class="text-xs text-muted">入选股票池</p>
+            <strong id="mPool" class="mt-2 block text-base text-white"></strong>
+          </div>
+        </section>
+
+        <section class="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_360px]">
+          <div class="overflow-hidden rounded-lg border border-line bg-panel/95 shadow-soft">
+            <div class="flex flex-col gap-2 border-b border-line bg-panel2/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-white">龙一到龙五</p>
+                <p class="mt-1 text-xs text-muted">涨幅 55% + 成交额 30% + 换手 10% + 涨停 5%</p>
+              </div>
+              <span class="w-fit rounded-full border border-line px-2.5 py-1 text-xs text-muted">主板股票池</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[760px] border-collapse text-sm">
+                <thead class="bg-slate-950/40 text-xs text-muted">
+                  <tr>
+                    <th class="px-3 py-3 text-left font-medium">排名</th>
+                    <th class="px-3 py-3 text-left font-medium">股票</th>
+                    <th class="px-3 py-3 text-left font-medium">涨跌幅</th>
+                    <th class="px-3 py-3 text-left font-medium">成交额</th>
+                    <th class="px-3 py-3 text-left font-medium">换手率</th>
+                    <th class="px-3 py-3 text-left font-medium">状态</th>
+                    <th class="px-3 py-3 text-left font-medium">强度</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderRows" class="divide-y divide-line"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <aside class="rounded-lg border border-line bg-panel/95 shadow-soft">
+            <div class="flex items-center justify-between border-b border-line bg-panel2/70 p-3">
+              <p class="text-sm font-semibold text-white">入选理由</p>
+              <span id="selectedRank" class="rounded-full border border-line px-2.5 py-1 text-xs text-muted"></span>
+            </div>
+            <div class="p-4">
+              <h3 id="selectedName" class="text-base font-semibold text-white"></h3>
+              <p id="selectedCode" class="mt-1 text-xs text-muted"></p>
+              <p id="selectedReason" class="mt-4 border-t border-line pt-4 text-sm leading-6 text-muted"></p>
+              <div id="scoreGrid" class="mt-4 grid gap-3"></div>
+            </div>
+            <div class="grid gap-2 border-t border-line p-4 text-xs text-muted">
+              <div class="flex items-center justify-between gap-3"><span>观察一</span><strong class="font-medium text-slate-200">是否继续放量</strong></div>
+              <div class="flex items-center justify-between gap-3"><span>观察二</span><strong class="font-medium text-slate-200">板块是否扩散</strong></div>
+              <div class="flex items-center justify-between gap-3"><span>观察三</span><strong class="font-medium text-slate-200">龙一断板后龙二承接</strong></div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="data/sectors-data.js"></script>
+  <script>
+    const EXCLUDED_PREFIXES = ["300", "301", "688"];
+    const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const CLIENT_SECTOR_CONFIG = [
+      {
+        id: "mlcc",
+        name: "MLCC",
+        summary: "主板 MLCC/被动元件股票池，交易时间每 5 分钟刷新一次行情强度。",
+        industry: ["风华高科", "洁美科技", "顺络电子", "火炬电子", "博迁新材"],
+        stocks: ["000636", "002859", "002138", "603678", "605218", "002484", "600563", "002463", "002436", "603738"]
+      },
+      {
+        id: "lithium",
+        name: "锂电",
+        summary: "主板锂电股票池，观察材料、资源和电池链主板弹性。",
+        industry: ["天赐材料", "赣锋锂业", "恩捷股份", "天齐锂业", "融捷股份"],
+        stocks: ["002709", "002460", "002812", "002466", "002074", "002340", "002176", "600884", "603659", "603799", "002756", "002594"]
+      },
+      {
+        id: "robot",
+        name: "机器人",
+        summary: "主板机器人股票池，重点看减速器、电机、控制和工业机器人环节。",
+        industry: ["中大力德", "埃斯顿", "鸣志电器", "柯力传感", "巨轮智能"],
+        stocks: ["002896", "002747", "603728", "002527", "002031", "603662", "603960", "002472", "002559", "603666", "603015"]
+      },
+      {
+        id: "cpo",
+        name: "CPO",
+        summary: "主板光通信/CPO股票池，观察 AI 算力链在主板的资金映射。",
+        industry: ["华工科技", "光迅科技", "中天科技", "亨通光电", "中兴通讯"],
+        stocks: ["000988", "002281", "600522", "600487", "000063", "002463", "002929", "600498", "002396", "002902"]
+      },
+      {
+        id: "chip",
+        name: "半导体",
+        summary: "主板半导体股票池，聚焦设备、封测、功率半导体和存储链。",
+        industry: ["北方华创", "兆易创新", "通富微电", "韦尔股份", "士兰微"],
+        stocks: ["002371", "603986", "002156", "603501", "002049", "600584", "600460", "002185", "600703", "002409", "605358"]
+      },
+      {
+        id: "solid",
+        name: "固态电池",
+        summary: "主板固态电池股票池，观察资源、材料和设备端强弱。",
+        industry: ["赣锋锂业", "天赐材料", "恩捷股份", "上海洗霸", "天齐锂业"],
+        stocks: ["603200", "002460", "002709", "002812", "002074", "002466", "002340", "002176", "600884", "603799"]
+      }
+    ];
+    const fallbackSectors = [
+      {
+        id: "mlcc",
+        name: "MLCC",
+        change: 0,
+        amount: 0,
+        heat: 0,
+        summary: "暂无生成数据，请运行 python3 generate-sector-data.py 更新。",
+        trading: [],
+        industry: []
+      }
+    ];
+
+    const rawSectors = Array.isArray(window.SECTOR_DATA?.sectors) && window.SECTOR_DATA.sectors.length
+      ? window.SECTOR_DATA.sectors
+      : fallbackSectors;
+
+    const allowedStock = stock => !EXCLUDED_PREFIXES.some(prefix => String(stock.code).padStart(6, "0").startsWith(prefix));
+    let sectors = rawSectors
+      .map(sector => {
+        const trading = (sector.trading || []).filter(allowedStock);
+        const industry = (sector.industry || []).filter(name => trading.some(stock => stock.name === name));
+        return { ...sector, trading, industry: industry.length ? industry : trading.map(stock => stock.name).slice(0, 3) };
+      })
+      .filter(sector => sector.trading.length);
+
+    let activeSectorId = sectors[0]?.id;
+    let mode = "trading";
+    let selectedIndex = 0;
+
+    const fmtPct = value => `${value > 0 ? "+" : ""}${Number(value || 0).toFixed(2)}%`;
+    const fmtAmount = value => `${Number(value || 0).toFixed(1)}亿`;
+    const tone = value => Number(value || 0) >= 0 ? "text-rise" : "text-fall";
+
+    function score(stock) {
+      const clippedChange = Math.max(-10, Math.min(Number(stock.change || 0), 10));
+      const changeScore = ((clippedChange + 10) / 20) * 55;
+      const amountScore = Math.min(Number(stock.amount || 0) / 80, 1) * 30;
+      const turnoverScore = Math.min(Number(stock.turnover || 0) / 15, 1) * 10;
+      const limitScore = stock.limit ? 5 : 0;
+      return Math.round(changeScore + amountScore + turnoverScore + limitScore);
+    }
+
+    function marketSymbol(code) {
+      const normalized = String(code).padStart(6, "0");
+      return `${normalized.startsWith("6") || normalized.startsWith("9") ? "sh" : "sz"}${normalized}`;
+    }
+
+    function parseSinaQuote(code) {
+      const symbol = marketSymbol(code);
+      const raw = window[`hq_str_${symbol}`];
+      if (!raw) return null;
+      const parts = raw.split(",");
+      if (parts.length < 32 || !parts[0]) return null;
+      const prevClose = Number(parts[2]);
+      const current = Number(parts[3]);
+      if (!prevClose || !current) return null;
+      const change = ((current - prevClose) / prevClose) * 100;
+      return {
+        name: parts[0],
+        code: String(code).padStart(6, "0"),
+        change,
+        amount: Number(parts[9] || 0) / 100000000,
+        turnover: 0,
+        limit: change >= 9.8,
+        date: parts[30] || "",
+        time: parts[31] || "",
+      };
+    }
+
+    function quoteReason(stock, sectorName) {
+      if (stock.limit) return `${sectorName}板块内涨停，短线辨识度较高。`;
+      if (stock.amount >= 50) return `${sectorName}板块内成交额居前，是观察板块强弱的重要锚点。`;
+      if (stock.change > 0) return `${sectorName}板块内涨幅靠前，资金活跃度相对更高。`;
+      return `${sectorName}板块内弱中相对强，适合观察是否率先修复。`;
+    }
+
+    function industryScore(stock, names) {
+      const index = names.indexOf(stock.name);
+      if (index >= 0) return Math.max(82, 98 - index * 4);
+      return Math.min(84, Math.max(60, score(stock) + 8));
+    }
+
+    function buildLiveSectors() {
+      return CLIENT_SECTOR_CONFIG.map(config => {
+        const stocks = config.stocks
+          .filter(code => !EXCLUDED_PREFIXES.some(prefix => String(code).startsWith(prefix)))
+          .map(code => parseSinaQuote(code))
+          .filter(Boolean)
+          .map(stock => ({
+            ...stock,
+            change: Number(stock.change.toFixed(2)),
+            amount: Number(stock.amount.toFixed(2)),
+            reason: quoteReason(stock, config.name),
+            industryScore: industryScore(stock, config.industry)
+          }))
+          .sort((a, b) => score(b) - score(a));
+        const leaders = stocks.slice(0, 5);
+        const industry = config.industry.filter(name => leaders.some(stock => stock.name === name));
+        industry.push(...leaders.map(stock => stock.name).filter(name => !industry.includes(name)));
+        const change = stocks.length ? stocks.reduce((sum, stock) => sum + stock.change, 0) / stocks.length : 0;
+        return {
+          id: config.id,
+          name: config.name,
+          change: Number(change.toFixed(2)),
+          amount: Number(stocks.reduce((sum, stock) => sum + stock.amount, 0).toFixed(1)),
+          heat: leaders.length ? Math.round(leaders.reduce((sum, stock) => sum + score(stock), 0) / leaders.length) : 0,
+          summary: config.summary,
+          trading: leaders,
+          industry: industry.slice(0, 5)
+        };
+      }).filter(sector => sector.trading.length);
+    }
+
+    function loadSinaQuotes(codes) {
+      return new Promise((resolve, reject) => {
+        const id = `sinaQuote${Date.now()}`;
+        const script = document.createElement("script");
+        script.id = id;
+        script.charset = "gbk";
+        script.src = `https://hq.sinajs.cn/list=${codes.map(marketSymbol).join(",")}&_=${Date.now()}`;
+        script.onload = () => {
+          script.remove();
+          resolve();
+        };
+        script.onerror = () => {
+          script.remove();
+          reject(new Error("行情接口加载失败"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    function chinaNow() {
+      const parts = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        weekday: "short"
+      }).formatToParts(new Date());
+      const value = type => parts.find(part => part.type === type)?.value || "";
+      return {
+        weekday: value("weekday"),
+        hour: Number(value("hour")),
+        minute: Number(value("minute")),
+        second: Number(value("second"))
+      };
+    }
+
+    function isTradingTime() {
+      const now = chinaNow();
+      if (["周六", "周日", "Sat", "Sun"].includes(now.weekday)) return false;
+      const minutes = now.hour * 60 + now.minute;
+      return (minutes >= 9 * 60 + 30 && minutes <= 11 * 60 + 30) ||
+        (minutes >= 13 * 60 && minutes <= 15 * 60);
+    }
+
+    let lastRefreshAt = 0;
+    async function refreshQuotes(force = false) {
+      const now = Date.now();
+      if (!force && (!isTradingTime() || now - lastRefreshAt < REFRESH_INTERVAL_MS)) return;
+      const allCodes = [...new Set(CLIENT_SECTOR_CONFIG.flatMap(sector => sector.stocks))]
+        .filter(code => !EXCLUDED_PREFIXES.some(prefix => String(code).startsWith(prefix)));
+      document.querySelector("#refreshStatus").textContent = "刷新中";
+      try {
+        await loadSinaQuotes(allCodes);
+        const liveSectors = buildLiveSectors();
+        if (liveSectors.length) {
+          sectors = liveSectors;
+          if (!sectors.some(sector => sector.id === activeSectorId)) activeSectorId = sectors[0]?.id;
+          selectedIndex = 0;
+          lastRefreshAt = Date.now();
+          document.querySelector("#refreshStatus").textContent = `已刷新 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+          document.querySelector("#tradeDate").textContent = `实时观察 · ${new Date().toLocaleDateString("zh-CN")} · 新浪行情 · 5分钟刷新`;
+          render();
+        }
+      } catch (error) {
+        document.querySelector("#refreshStatus").textContent = "刷新失败";
+      }
+    }
+
+    function rankedStocks(sector) {
+      if (mode === "industry") {
+        const byName = Object.fromEntries(sector.trading.map(stock => [stock.name, stock]));
+        return sector.industry.map(name => byName[name]).filter(Boolean).slice(0, 5);
+      }
+      return [...sector.trading].sort((a, b) => score(b) - score(a)).slice(0, 5);
+    }
+
+    function filteredSectors() {
+      const term = document.querySelector("#search").value.trim().toLowerCase();
+      const sortBy = document.querySelector("#sortBy").value;
+      const sorted = [...sectors].sort((a, b) => {
+        if (sortBy === "change") return Number(b.change || 0) - Number(a.change || 0);
+        if (sortBy === "amount") return Number(b.amount || 0) - Number(a.amount || 0);
+        return Number(b.heat || 0) - Number(a.heat || 0);
+      });
+      if (!term) return sorted;
+      return sorted.filter(sector => {
+        const stocks = sector.trading.map(stock => `${stock.name}${stock.code}`).join("");
+        return `${sector.name}${stocks}`.toLowerCase().includes(term);
+      });
+    }
+
+    function renderSectors() {
+      const list = document.querySelector("#sectorList");
+      const items = filteredSectors();
+      list.innerHTML = items.map(sector => `
+        <button type="button" data-id="${sector.id}" class="group rounded-lg border p-3 text-left transition ${sector.id === activeSectorId ? "border-blue-400 bg-blue-400/10" : "border-line bg-panel hover:border-blue-400/70 hover:bg-panel2"}">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-semibold text-white">${sector.name}</span>
+            <span class="text-sm font-semibold ${tone(sector.change)}">${fmtPct(sector.change)}</span>
+          </div>
+          <div class="mt-2 flex items-center justify-between gap-3 text-xs text-muted">
+            <span>成交 ${fmtAmount(sector.amount)}</span>
+            <span>热度 ${sector.heat || 0}</span>
+          </div>
+        </button>
+      `).join("");
+      list.querySelectorAll("button").forEach(button => {
+        button.addEventListener("click", () => {
+          activeSectorId = button.dataset.id;
+          selectedIndex = 0;
+          render();
+        });
+      });
+    }
+
+    function renderScoreGrid(stock) {
+      const items = [
+        ["涨幅", Math.round(((Math.max(-10, Math.min(Number(stock.change || 0), 10)) + 10) / 20) * 100)],
+        ["成交额", Math.round(Math.min(Number(stock.amount || 0) / 80, 1) * 100)],
+        ["换手", Math.round(Math.min(Number(stock.turnover || 0) / 15, 1) * 100)],
+        ["产业", Number(stock.industryScore || 60)]
+      ];
+      document.querySelector("#scoreGrid").innerHTML = items.map(([label, value]) => `
+        <div class="grid grid-cols-[52px_minmax(0,1fr)_36px] items-center gap-2 text-xs text-muted">
+          <span>${label}</span>
+          <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
+            <span class="block h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-300" style="width:${value}%"></span>
+          </div>
+          <strong class="text-right font-medium text-slate-200">${value}</strong>
+        </div>
+      `).join("");
+    }
+
+    function renderMain() {
+      const sector = sectors.find(item => item.id === activeSectorId) || sectors[0];
+      if (!sector) return;
+      const stocks = rankedStocks(sector);
+      const selected = stocks[selectedIndex] || stocks[0];
+      if (!selected) return;
+      const limitCount = sector.trading.filter(stock => stock.limit).length;
+
+      document.querySelector("#sectorTitle").textContent = sector.name;
+      document.querySelector("#sectorSummary").textContent = sector.summary || "";
+      document.querySelector("#ruleChip").textContent = mode === "trading" ? "短线交易口径" : "产业地位口径";
+      document.querySelector("#mChange").className = `mt-2 block text-base ${tone(sector.change)}`;
+      document.querySelector("#mChange").textContent = fmtPct(sector.change);
+      document.querySelector("#mAmount").textContent = fmtAmount(sector.amount);
+      document.querySelector("#mLimit").textContent = `${limitCount} 只`;
+      document.querySelector("#mPool").textContent = `${sector.trading.length} 只`;
+
+      document.querySelector("#leaderRows").innerHTML = stocks.map((stock, index) => {
+        const rankName = ["龙一", "龙二", "龙三", "龙四", "龙五"][index] || `第${index + 1}`;
+        const rankColor = index === 0 ? "bg-gold text-slate-950" : index === 1 ? "bg-slate-300 text-slate-950" : index === 2 ? "bg-orange-300 text-slate-950" : "bg-slate-700 text-slate-100";
+        const value = mode === "trading" ? score(stock) : Number(stock.industryScore || 60);
+        return `
+          <tr data-index="${index}" class="cursor-pointer transition hover:bg-blue-400/5">
+            <td class="px-3 py-3"><span class="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold ${rankColor}">${index + 1}</span></td>
+            <td class="px-3 py-3">
+              <div class="text-sm font-semibold text-white">${stock.name}</div>
+              <div class="mt-1 text-xs text-muted">${stock.code} · ${rankName}</div>
+            </td>
+            <td class="px-3 py-3 text-sm font-semibold ${tone(stock.change)}">${fmtPct(stock.change)}</td>
+            <td class="px-3 py-3 text-sm text-slate-200">${fmtAmount(stock.amount)}</td>
+            <td class="px-3 py-3 text-sm text-slate-200">${Number(stock.turnover || 0).toFixed(1)}%</td>
+            <td class="px-3 py-3"><span class="rounded-full border border-line px-2 py-1 text-xs text-muted">${stock.limit ? "涨停" : "趋势"}</span></td>
+            <td class="px-3 py-3">
+              <div class="h-1.5 w-28 overflow-hidden rounded-full bg-slate-800">
+                <span class="block h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-300" style="width:${value}%"></span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      document.querySelectorAll("#leaderRows tr").forEach(row => {
+        row.addEventListener("click", () => {
+          selectedIndex = Number(row.dataset.index);
+          renderMain();
+        });
+      });
+
+      document.querySelector("#selectedRank").textContent = ["龙一", "龙二", "龙三", "龙四", "龙五"][selectedIndex] || `第${selectedIndex + 1}`;
+      document.querySelector("#selectedName").textContent = selected.name;
+      document.querySelector("#selectedCode").textContent = `${selected.code} · ${mode === "trading" ? "交易强度" : "产业地位"}`;
+      document.querySelector("#selectedReason").textContent = selected.reason || "";
+      renderScoreGrid(selected);
+    }
+
+    function render() {
+      renderSectors();
+      renderMain();
+    }
+
+    const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
+    const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
+    document.querySelector("#tradeDate").textContent = `盘后观察 · ${generatedAt.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })}${source}`;
+    document.querySelector("#search").addEventListener("input", renderSectors);
+    document.querySelector("#sortBy").addEventListener("change", renderSectors);
+    document.querySelector("#modeTrading").addEventListener("click", () => {
+      mode = "trading";
+      selectedIndex = 0;
+      document.querySelector("#modeTrading").className = "h-9 bg-blue-400 font-semibold text-slate-950";
+      document.querySelector("#modeIndustry").className = "h-9 text-muted transition hover:text-white";
+      render();
+    });
+    document.querySelector("#modeIndustry").addEventListener("click", () => {
+      mode = "industry";
+      selectedIndex = 0;
+      document.querySelector("#modeIndustry").className = "h-9 bg-blue-400 font-semibold text-slate-950";
+      document.querySelector("#modeTrading").className = "h-9 text-muted transition hover:text-white";
+      render();
+    });
+
+    render();
+    refreshQuotes(true);
+    setInterval(() => refreshQuotes(false), 60 * 1000);
+  </script>
+</body>
+</html>
