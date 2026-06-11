@@ -4,6 +4,7 @@ import math
 import sys
 import urllib.request
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 
 
@@ -14,6 +15,8 @@ if VENDOR.exists():
     sys.path.insert(0, str(VENDOR))
 
 EXCLUDED_PREFIXES = ("300", "301", "688")
+TOP_INDUSTRY_COUNT = 5
+TOP_STOCK_COUNT = 5
 
 
 SECTOR_CONFIG = [
@@ -75,7 +78,7 @@ def clean_number(value, default=0.0):
         if math.isnan(value):
             return default
         return float(value)
-    text = str(value).replace(",", "").replace("%", "").strip()
+    text = str(value).replace(",", "").replace("%", "").replace("亿", "").replace("万", "").strip()
     if text in {"", "-", "None", "nan"}:
         return default
     try:
@@ -92,6 +95,11 @@ def get_value(row, names, default=None):
 
 
 def normalize_amount(value):
+    text = str(value)
+    if "亿" in text:
+        return round(clean_number(text), 2)
+    if "万" in text:
+        return round(clean_number(text) / 10000, 2)
     amount = clean_number(value)
     if amount > 100000000:
         return round(amount / 100000000, 2)
@@ -116,6 +124,23 @@ def score(stock):
     turnover_score = min(stock["turnover"] / 15, 1) * 10
     limit_score = 5 if stock["limit"] else 0
     return round(change_score + amount_score + turnover_score + limit_score)
+
+
+def board_heat(row):
+    change = clean_number(get_value(row, ["涨跌幅", "涨跌幅%"], 0))
+    amount = normalize_amount(get_value(row, ["成交额", "成交金额", "总成交额"], 0))
+    turnover = clean_number(get_value(row, ["换手率", "换手率%"], 0))
+    leader_change = clean_number(get_value(row, ["领涨股票-涨跌幅", "领涨股涨跌幅", "领涨涨幅"], 0))
+    up_count = clean_number(get_value(row, ["上涨家数", "上涨数"], 0))
+    down_count = clean_number(get_value(row, ["下跌家数", "下跌数"], 0))
+    breadth = up_count / max(up_count + down_count, 1)
+
+    change_score = ((max(-5, min(change, 10)) + 5) / 15) * 45
+    amount_score = min(amount / 300, 1) * 30
+    turnover_score = min(turnover / 8, 1) * 10
+    leader_score = ((max(-5, min(leader_change, 10)) + 5) / 15) * 10
+    breadth_score = breadth * 5
+    return round(change_score + amount_score + turnover_score + leader_score + breadth_score)
 
 
 def industry_score(stock, industry_names):
@@ -157,6 +182,16 @@ def find_board_symbol(boards, aliases):
     return None
 
 
+def board_amount(boards, symbol):
+    if symbol is None or "板块名称" not in boards.columns:
+        return 0.0
+    rows = boards[boards["板块名称"].astype(str) == symbol]
+    if rows.empty:
+        return 0.0
+    row = rows.iloc[0].to_dict()
+    return normalize_amount(get_value(row, ["成交额", "成交金额", "总成交额"], 0))
+
+
 def board_change(boards, symbol):
     if symbol is None or "板块名称" not in boards.columns:
         return 0.0
@@ -167,14 +202,23 @@ def board_change(boards, symbol):
     return round(clean_number(get_value(row, ["涨跌幅", "涨跌幅%"], 0)), 2)
 
 
+def board_leader_names(row):
+    names = []
+    for key in ["领涨股票", "领涨股", "领涨名称"]:
+        value = get_value(row, [key], "")
+        if value:
+            names.append(str(value))
+    return names
+
+
 def build_stock(row, sector_name, industry_names):
     code = str(get_value(row, ["代码", "股票代码"], "")).zfill(6)
     if not is_allowed_code(code):
         return None
     name = str(get_value(row, ["名称", "股票名称"], ""))
-    change = round(clean_number(get_value(row, ["涨跌幅", "涨跌幅%"], 0)), 2)
+    change = round(clean_number(get_value(row, ["涨跌幅", "涨跌幅%", "涨跌幅(%)"], 0)), 2)
     amount = normalize_amount(get_value(row, ["成交额", "成交金额"], 0))
-    turnover = round(clean_number(get_value(row, ["换手率", "换手率%"], 0)), 2)
+    turnover = round(clean_number(get_value(row, ["换手率", "换手率%", "换手(%)"], 0)), 2)
     stock = {
         "name": name,
         "code": code,
@@ -186,6 +230,141 @@ def build_stock(row, sector_name, industry_names):
     stock["reason"] = reason_for(stock, sector_name)
     stock["industryScore"] = industry_score(stock, industry_names)
     return stock
+
+
+def build_ths_stock(row, sector_name, industry_names):
+    code = str(get_value(row, ["代码", "股票代码"], "")).strip().zfill(6)
+    if not is_allowed_code(code):
+        return None
+    stock = {
+        "name": str(get_value(row, ["名称", "股票简称", "股票名称"], "")),
+        "code": code,
+        "change": round(clean_number(get_value(row, ["涨跌幅(%)", "涨跌幅", "涨跌幅%"], 0)), 2),
+        "amount": normalize_amount(get_value(row, ["成交额", "成交金额"], 0)),
+        "turnover": round(clean_number(get_value(row, ["换手(%)", "换手率", "换手率%"], 0)), 2),
+        "limit": False,
+    }
+    stock["limit"] = is_limit_up(code, stock["change"])
+    stock["reason"] = reason_for(stock, sector_name)
+    stock["industryScore"] = industry_score(stock, industry_names)
+    return stock
+
+
+def build_industry_sector(ak, boards, board_row, index):
+    symbol = str(get_value(board_row, ["板块名称", "行业名称"], "")).strip()
+    if not symbol:
+        raise RuntimeError("行业名称为空")
+
+    cons = ak.stock_board_industry_cons_em(symbol=symbol)
+    preferred_names = board_leader_names(board_row)
+    stocks = [
+        build_stock(row, symbol, preferred_names)
+        for row in cons.to_dict("records")
+    ]
+    stocks = [stock for stock in stocks if stock and stock["name"] and stock["code"]]
+    stocks.sort(key=score, reverse=True)
+    leaders = stocks[:TOP_STOCK_COUNT]
+    industry = [name for name in preferred_names if any(stock["name"] == name for stock in leaders)]
+    industry += [stock["name"] for stock in leaders if stock["name"] not in industry]
+
+    return {
+        "id": f"industry-{index + 1}",
+        "name": symbol,
+        "change": round(clean_number(get_value(board_row, ["涨跌幅", "涨跌幅%"], 0)), 2),
+        "amount": board_amount(boards, symbol) or round(sum(stock["amount"] for stock in stocks), 1),
+        "heat": board_heat(board_row),
+        "summary": f"东方财富行业热度前 {TOP_INDUSTRY_COUNT}，按行业成份股涨幅、成交额、换手率和涨停状态筛选前 {TOP_STOCK_COUNT} 只股票。 数据板块源：{symbol}。",
+        "trading": leaders,
+        "industry": industry[:TOP_STOCK_COUNT],
+    }
+
+
+def ths_headers():
+    import py_mini_racer
+    from akshare.datasets import get_ths_js
+
+    js_code = py_mini_racer.MiniRacer()
+    with open(get_ths_js("ths.js"), encoding="utf-8") as file:
+        js_code.eval(file.read())
+    v_code = js_code.call("v")
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Cookie": f"v={v_code}",
+        "hexin-v": v_code,
+        "Referer": "http://q.10jqka.com.cn/thshy/",
+    }
+
+
+def ths_industry_codes(ak):
+    frame = ak.stock_board_industry_name_ths()
+    return {
+        str(row["name"]): str(row["code"])
+        for row in frame.to_dict("records")
+        if row.get("name") and row.get("code")
+    }
+
+
+def fetch_ths_industry_stocks(code, headers, max_pages=10):
+    import pandas as pd
+    import requests
+
+    records = []
+    seen = set()
+    for page in range(1, max_pages + 1):
+        if page == 1:
+            url = f"http://q.10jqka.com.cn/thshy/detail/code/{code}/"
+        else:
+            url = f"http://q.10jqka.com.cn/thshy/detail/code/{code}/field/199112/order/desc/page/{page}/"
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        tables = pd.read_html(StringIO(response.text))
+        if not tables:
+            break
+        page_records = tables[0].to_dict("records")
+        new_records = []
+        for row in page_records:
+            stock_code = str(get_value(row, ["代码", "股票代码"], "")).strip().zfill(6)
+            if not stock_code or stock_code in seen:
+                continue
+            seen.add(stock_code)
+            new_records.append(row)
+        records.extend(new_records)
+        allowed_count = sum(1 for row in records if is_allowed_code(get_value(row, ["代码", "股票代码"], "")))
+        if allowed_count >= TOP_STOCK_COUNT or not new_records:
+            break
+    return records
+
+
+def build_ths_sector(ak, code_map, headers, board_row, index):
+    symbol = str(get_value(board_row, ["板块", "板块名称", "行业名称"], "")).strip()
+    if not symbol:
+        raise RuntimeError("行业名称为空")
+    code = code_map.get(symbol)
+    if not code:
+        raise RuntimeError(f"找不到同花顺行业代码：{symbol}")
+
+    preferred_names = board_leader_names(board_row)
+    stocks = [
+        build_ths_stock(row, symbol, preferred_names)
+        for row in fetch_ths_industry_stocks(code, headers)
+    ]
+    stocks = [stock for stock in stocks if stock and stock["name"] and stock["code"]]
+    stocks.sort(key=score, reverse=True)
+    leaders = stocks[:TOP_STOCK_COUNT]
+    industry = [name for name in preferred_names if any(stock["name"] == name for stock in leaders)]
+    industry += [stock["name"] for stock in leaders if stock["name"] not in industry]
+
+    return {
+        "id": f"industry-{index + 1}",
+        "name": symbol,
+        "change": round(clean_number(get_value(board_row, ["涨跌幅", "涨跌幅%"], 0)), 2),
+        "amount": normalize_amount(get_value(board_row, ["总成交额", "成交额", "成交金额"], 0)),
+        "heat": board_heat(board_row),
+        "summary": f"同花顺行业热度前 {TOP_INDUSTRY_COUNT}，按行业成份股涨幅、成交额、换手率和涨停状态筛选前 {TOP_STOCK_COUNT} 只股票。 数据板块源：{symbol}。",
+        "trading": leaders,
+        "industry": industry[:TOP_STOCK_COUNT],
+    }
 
 
 def build_sector(ak, boards, config):
@@ -200,7 +379,7 @@ def build_sector(ak, boards, config):
     ]
     stocks = [stock for stock in stocks if stock and stock["name"] and stock["code"]]
     stocks.sort(key=score, reverse=True)
-    leaders = stocks[:5]
+    leaders = stocks[:TOP_STOCK_COUNT]
     industry = [name for name in config["industry"] if any(stock["name"] == name for stock in leaders)]
     industry += [stock["name"] for stock in leaders if stock["name"] not in industry]
 
@@ -212,7 +391,7 @@ def build_sector(ak, boards, config):
         "heat": min(100, max(0, round(sum(score(stock) for stock in leaders) / max(len(leaders), 1)))),
         "summary": config["summary"] + f" 数据板块源：{symbol}。",
         "trading": leaders,
-        "industry": industry[:5],
+        "industry": industry[:TOP_STOCK_COUNT],
     }
 
 
@@ -277,7 +456,7 @@ def build_sina_sector(config, quotes):
         stocks.append(stock)
 
     stocks.sort(key=score, reverse=True)
-    leaders = stocks[:5]
+    leaders = stocks[:TOP_STOCK_COUNT]
     industry = [name for name in config["industry"] if any(stock["name"] == name for stock in leaders)]
     industry += [stock["name"] for stock in leaders if stock["name"] not in industry]
 
@@ -290,7 +469,7 @@ def build_sina_sector(config, quotes):
         "heat": min(100, max(0, round(sum(score(stock) for stock in leaders) / max(len(leaders), 1)))),
         "summary": config["summary"] + " 数据板块源：自维护股票池/新浪行情。",
         "trading": leaders,
-        "industry": industry[:5],
+        "industry": industry[:TOP_STOCK_COUNT],
     }
 
 
@@ -313,21 +492,71 @@ def generate_sina():
 
 def generate_akshare():
     ak = load_akshare()
-    boards = ak.stock_board_concept_name_em()
+    try:
+        return generate_eastmoney_industries(ak)
+    except Exception as eastmoney_error:
+        payload = generate_ths_industries(ak)
+        payload["errors"].insert(0, f"东方财富行业板块不可用，已切换同花顺行业：{eastmoney_error}")
+        return payload
+
+
+def generate_eastmoney_industries(ak):
+    boards = ak.stock_board_industry_name_em()
+    if "板块名称" not in boards.columns:
+        raise RuntimeError(f"行业板块接口缺少板块名称字段：{list(boards.columns)}")
+
     sectors = []
     errors = []
-    for config in SECTOR_CONFIG:
+    board_rows = sorted(boards.to_dict("records"), key=board_heat, reverse=True)
+    for board_row in board_rows:
+        if len(sectors) >= TOP_INDUSTRY_COUNT:
+            break
         try:
-            sectors.append(build_sector(ak, boards, config))
+            sector = build_industry_sector(ak, boards, board_row, len(sectors))
+            if sector["trading"]:
+                sectors.append(sector)
         except Exception as exc:
-            errors.append(f"{config['name']}: {exc}")
+            name = get_value(board_row, ["板块名称", "行业名称"], "未知行业")
+            errors.append(f"{name}: {exc}")
 
     if not sectors:
-        raise RuntimeError("没有生成任何板块数据；" + "；".join(errors))
+        raise RuntimeError("没有生成任何行业板块数据；" + "；".join(errors))
 
     return {
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
-        "source": "AkShare/东方财富",
+        "source": "AkShare/东方财富行业板块",
+        "errors": errors,
+        "sectors": sectors,
+    }
+
+
+def generate_ths_industries(ak):
+    boards = ak.stock_board_industry_summary_ths()
+    if "板块" not in boards.columns:
+        raise RuntimeError(f"同花顺行业汇总接口缺少板块字段：{list(boards.columns)}")
+
+    sectors = []
+    errors = []
+    code_map = ths_industry_codes(ak)
+    headers = ths_headers()
+    board_rows = sorted(boards.to_dict("records"), key=board_heat, reverse=True)
+    for board_row in board_rows:
+        if len(sectors) >= TOP_INDUSTRY_COUNT:
+            break
+        try:
+            sector = build_ths_sector(ak, code_map, headers, board_row, len(sectors))
+            if sector["trading"]:
+                sectors.append(sector)
+        except Exception as exc:
+            name = get_value(board_row, ["板块", "板块名称", "行业名称"], "未知行业")
+            errors.append(f"{name}: {exc}")
+
+    if not sectors:
+        raise RuntimeError("没有生成任何同花顺行业数据；" + "；".join(errors))
+
+    return {
+        "generatedAt": datetime.now().isoformat(timespec="seconds"),
+        "source": "AkShare/同花顺行业板块",
         "errors": errors,
         "sectors": sectors,
     }

@@ -36,6 +36,7 @@
           <div>
             <h1 class="text-base font-semibold tracking-normal text-slate-950">A股板块龙头榜</h1>
             <p id="tradeDate" class="mt-1 text-xs leading-5 text-muted"></p>
+            <p id="dataNotice" class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-800"></p>
           </div>
           <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-fall shadow-[0_0_0_6px_rgba(49,196,141,.12)]"></span>
         </div>
@@ -71,7 +72,7 @@
         <section class="mb-4 grid gap-3 rounded-lg border border-line bg-white p-3 shadow-soft md:grid-cols-[1fr_auto] md:items-center">
           <div class="flex flex-wrap items-center gap-2">
             <span class="rounded-md bg-slate-950 px-2.5 py-1 text-xs font-medium text-white">Market Monitor</span>
-            <span class="text-sm font-semibold text-slate-950">主板题材强度观察</span>
+            <span class="text-sm font-semibold text-slate-950">主板行业强度观察</span>
             <span class="text-xs text-muted">数据仅作看盘辅助，不构成投资建议</span>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -225,6 +226,8 @@
     const rawSectors = Array.isArray(window.SECTOR_DATA?.sectors) && window.SECTOR_DATA.sectors.length
       ? window.SECTOR_DATA.sectors
       : fallbackSectors;
+    const dataSourceName = window.SECTOR_DATA?.source || "";
+    const canUseClientRefresh = !dataSourceName || dataSourceName.includes("新浪");
 
     const allowedStock = stock => !EXCLUDED_PREFIXES.some(prefix => String(stock.code).padStart(6, "0").startsWith(prefix));
     let sectors = rawSectors
@@ -373,6 +376,7 @@
 
     let lastRefreshAt = 0;
     async function refreshQuotes(force = false) {
+      if (!canUseClientRefresh) return;
       const now = Date.now();
       if (!force && (!isTradingTime() || now - lastRefreshAt < REFRESH_INTERVAL_MS)) return;
       const allCodes = [...new Set(CLIENT_SECTOR_CONFIG.flatMap(sector => sector.stocks))]
@@ -386,8 +390,10 @@
           if (!sectors.some(sector => sector.id === activeSectorId)) activeSectorId = sectors[0]?.id;
           selectedIndex = 0;
           lastRefreshAt = Date.now();
-          document.querySelector("#refreshStatus").textContent = `已刷新 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
-          document.querySelector("#tradeDate").textContent = `实时观察 · ${new Date().toLocaleDateString("zh-CN")} · 新浪行情 · 5分钟刷新`;
+          const refreshedAt = new Date();
+          document.querySelector("#refreshStatus").textContent = `已刷新 ${formatTime(refreshedAt)}`;
+          document.querySelector("#tradeDate").textContent = `实时观察 · 最后刷新 ${formatDateTime(refreshedAt)} · 新浪行情 · 5分钟刷新`;
+          updateDataNotice("新浪行情/自维护股票池", window.SECTOR_DATA?.errors || []);
           render();
         }
       } catch (error) {
@@ -520,9 +526,55 @@
       renderMain();
     }
 
+    function updateDataNotice(sourceName, errors = []) {
+      const notice = document.querySelector("#dataNotice");
+      const sourceText = sourceName || "示例数据";
+      const warnings = [];
+      if (sourceText.includes("新浪")) {
+        warnings.push("当前为新浪备用行情，换手率不可用，板块成份股来自自维护股票池。");
+      }
+      if (sourceText.includes("同花顺")) {
+        warnings.push("当前为 AkShare/同花顺行业板块数据，自动取行业热度前五及各行业前五股票。");
+      }
+      if (sourceText.includes("示例")) {
+        warnings.push("当前展示示例数据，请运行脚本生成真实行情后再用于复盘。");
+      }
+      if (errors.length) {
+        warnings.push("数据源曾发生降级，请以页面显示的数据源为准。");
+      }
+      notice.textContent = warnings.length
+        ? warnings.join(" ")
+        : "当前为 AkShare/东方财富行业板块数据，自动取行业热度前五及各行业前五股票，仍仅作看盘辅助。";
+      notice.className = warnings.length
+        ? "mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-800"
+        : "mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs leading-5 text-emerald-800";
+    }
+
+    function formatDateTime(date) {
+      return date.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      });
+    }
+
     const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
-    document.querySelector("#tradeDate").textContent = `盘后观察 · ${generatedAt.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })}${source}`;
+    document.querySelector("#tradeDate").textContent = `盘后观察 · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
+    updateDataNotice(window.SECTOR_DATA?.source, window.SECTOR_DATA?.errors || []);
     document.querySelector("#search").addEventListener("input", renderSectors);
     document.querySelector("#sortBy").addEventListener("change", renderSectors);
     document.querySelector("#modeTrading").addEventListener("click", () => {
