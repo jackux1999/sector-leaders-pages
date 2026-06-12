@@ -6,6 +6,7 @@
 
 - `index.html`
 - `sector-leaders.html`
+- `local-server.py`
 - `generate-sector-data.py`
 - `data/sectors-data.js`
 
@@ -28,8 +29,7 @@
 - 展示入选理由和分数拆解
 - 仅保留沪深主板股票
 - 页面使用 Tailwind CSS 样式，按 12px、14px、16px 文字层级设计
-- 新浪备用源模式下，可点击“刷新一次”手动拉取一次新浪行情
-- 行业板块模式下，“刷新一次”会重新载入最新的 `data/sectors-data.js`，避免浏览器缓存旧数据
+- 本地服务模式下，可点击“刷新一次”自动运行数据生成脚本
 - 支持点击“胜率分析”后调用火山方舟接口生成博弈分析
 - 火山 API Key 和模型 / Endpoint ID 在页面本地输入，不写入数据文件
 - 每个行业展示龙一到龙五
@@ -109,13 +109,25 @@ python3 -m pip install -r requirements.txt --target vendor
 
 ## 更新数据
 
-运行：
+推荐启动本地服务：
+
+```bash
+python3 local-server.py
+```
+
+然后打开：
+
+```text
+http://127.0.0.1:8765/index.html
+```
+
+点击页面里的“刷新一次”会调用 `/refresh`，服务端会运行：
 
 ```bash
 python3 generate-sector-data.py
 ```
 
-运行后会生成：
+运行后会更新：
 
 ```text
 data/sectors-data.js
@@ -168,13 +180,13 @@ window.SECTOR_DATA = {
 
 ## 使用方式
 
-直接用浏览器打开：
+也可以直接用浏览器打开静态文件：
 
 ```text
 index.html
 ```
 
-这是纯静态页面，不需要启动服务。
+但静态文件模式不能执行 `/refresh`，点击“刷新一次”不会运行 Python 脚本。
 
 ## GitHub Pages 部署
 
@@ -186,6 +198,7 @@ sector-leaders.html
 sector-leaders.md
 data/sectors-data.js
 generate-sector-data.py
+local-server.py
 requirements.txt
 .nojekyll
 ```
@@ -204,12 +217,12 @@ Folder: /root
 https://你的用户名.github.io/仓库名/
 ```
 
-页面本身不做后台轮询；需要刷新页面数据时点击页面里的“刷新一次”。如果要重新筛选当天行业前五，需要先重新运行 `python3 generate-sector-data.py`，再点击刷新载入最新数据文件。
+GitHub Pages 是静态托管，不能执行本地 `/refresh` 接口。部署模式下需要在本地或自动化流程先运行 `python3 generate-sector-data.py`，再提交生成后的 `data/sectors-data.js`。
 
 ## 当前限制
 
 - 页面使用 Tailwind CDN，首次打开需要能访问 `cdn.tailwindcss.com` 才能加载完整样式。
-- 新浪备用源的手动刷新依赖新浪行情脚本接口，浏览器网络或接口限制会影响刷新。
+- “刷新一次”需要通过 `python3 local-server.py` 启动页面；静态文件或 GitHub Pages 不能直接运行本地 Python。
 - 火山胜率分析由浏览器直接调用方舟接口，若浏览器或接口跨域策略限制，需改成本地代理服务。
 - 东方财富行业板块接口偶尔会断开，脚本会自动切到新浪备用源。
 - 新浪备用源没有真实换手率，所以换手率会显示为 0。

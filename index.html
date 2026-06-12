@@ -619,7 +619,7 @@
         warnings.push("当前为 AkShare/同花顺行业板块数据，自动取行业热度前五及各行业前五股票。");
       }
       if (sourceText.includes("东方财富") || sourceText.includes("同花顺")) {
-        warnings.push("点击刷新一次会重新载入最新数据文件；若要重新筛选当天行业前五，请先运行 python3 generate-sector-data.py。");
+        warnings.push("通过本地服务点击刷新一次会重新抓取数据并筛选行业前五。");
       }
       if (sourceText.includes("示例")) {
         warnings.push("当前展示示例数据，请运行脚本生成真实行情后再用于复盘。");
@@ -738,16 +738,36 @@
       }
     }
 
+    async function refreshFromLocalServer() {
+      const status = document.querySelector("#refreshStatus");
+      const button = document.querySelector("#refreshOnce");
+      status.textContent = "刷新中";
+      button.disabled = true;
+      button.textContent = "刷新中";
+      try {
+        const response = await fetch("/refresh", { method: "POST" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || data.stderr || data.stdout || `刷新失败：${response.status}`);
+        }
+        status.textContent = "刷新完成";
+        window.location.href = `${window.location.pathname}?v=${Date.now()}`;
+      } catch (error) {
+        status.textContent = "刷新失败";
+        document.querySelector("#dataNotice").textContent = `本地刷新失败：${error.message || error}。请用 python3 local-server.py 启动页面后再刷新。`;
+      } finally {
+        button.disabled = false;
+        button.textContent = "刷新一次";
+      }
+    }
+
     const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
     document.querySelector("#tradeDate").textContent = `${observationLabel()} · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
     updateDataNotice(window.SECTOR_DATA?.source, window.SECTOR_DATA?.errors || []);
     document.querySelector("#search").addEventListener("input", renderSectors);
     document.querySelector("#sortBy").addEventListener("change", renderSectors);
-    document.querySelector("#refreshOnce").addEventListener("click", () => {
-      document.querySelector("#refreshStatus").textContent = "重新载入";
-      window.location.reload();
-    });
+    document.querySelector("#refreshOnce").addEventListener("click", refreshFromLocalServer);
     document.querySelector("#volcModel").value = localStorage.getItem("volcModel") || "";
     document.querySelector("#analyzeOdds").addEventListener("click", analyzeOdds);
     document.querySelector("#modeTrading").addEventListener("click", () => {
