@@ -225,6 +225,10 @@ def build_stock(row, sector_name, industry_names):
         "change": change,
         "amount": amount,
         "turnover": turnover,
+        "price": round(clean_number(get_value(row, ["最新价", "现价", "收盘价"], 0)), 2),
+        "pe": round(clean_number(get_value(row, ["市盈率", "市盈率-动态", "动态市盈率"], 0)), 2),
+        "pb": round(clean_number(get_value(row, ["市净率", "市净率-动态"], 0)), 2),
+        "marketCap": normalize_amount(get_value(row, ["流通市值", "总市值"], 0)),
         "limit": is_limit_up(code, change),
     }
     stock["reason"] = reason_for(stock, sector_name)
@@ -242,6 +246,10 @@ def build_ths_stock(row, sector_name, industry_names):
         "change": round(clean_number(get_value(row, ["涨跌幅(%)", "涨跌幅", "涨跌幅%"], 0)), 2),
         "amount": normalize_amount(get_value(row, ["成交额", "成交金额"], 0)),
         "turnover": round(clean_number(get_value(row, ["换手(%)", "换手率", "换手率%"], 0)), 2),
+        "price": round(clean_number(get_value(row, ["现价", "最新价", "收盘价"], 0)), 2),
+        "pe": round(clean_number(get_value(row, ["市盈率", "市盈率(动)", "动态市盈率"], 0)), 2),
+        "pb": round(clean_number(get_value(row, ["市净率", "市净率(动)", "动态市净率"], 0)), 2),
+        "marketCap": normalize_amount(get_value(row, ["流通市值", "总市值"], 0)),
         "limit": False,
     }
     stock["limit"] = is_limit_up(code, stock["change"])
@@ -437,6 +445,10 @@ def fetch_sina_quotes(codes):
             "change": change,
             "amount": round(clean_number(values[9]) / 100000000, 2),
             "turnover": 0.0,
+            "price": round(current, 2),
+            "pe": 0.0,
+            "pb": 0.0,
+            "marketCap": 0.0,
             "limit": is_limit_up(code, change),
             "date": values[30] if len(values) > 30 else "",
             "time": values[31] if len(values) > 31 else "",
@@ -513,8 +525,10 @@ def generate_eastmoney_industries(ak):
             break
         try:
             sector = build_industry_sector(ak, boards, board_row, len(sectors))
-            if sector["trading"]:
+            if len(sector["trading"]) >= TOP_STOCK_COUNT:
                 sectors.append(sector)
+            else:
+                errors.append(f"{sector['name']}: 过滤后不足 {TOP_STOCK_COUNT} 只股票")
         except Exception as exc:
             name = get_value(board_row, ["板块名称", "行业名称"], "未知行业")
             errors.append(f"{name}: {exc}")
@@ -545,8 +559,10 @@ def generate_ths_industries(ak):
             break
         try:
             sector = build_ths_sector(ak, code_map, headers, board_row, len(sectors))
-            if sector["trading"]:
+            if len(sector["trading"]) >= TOP_STOCK_COUNT:
                 sectors.append(sector)
+            else:
+                errors.append(f"{sector['name']}: 过滤后不足 {TOP_STOCK_COUNT} 只股票")
         except Exception as exc:
             name = get_value(board_row, ["板块", "板块名称", "行业名称"], "未知行业")
             errors.append(f"{name}: {exc}")

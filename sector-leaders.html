@@ -76,7 +76,7 @@
             <span class="text-xs text-muted">数据仅作看盘辅助，不构成投资建议</span>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
-            <span class="rounded-full bg-slate-100 px-2.5 py-1">5分钟刷新</span>
+            <button id="refreshOnce" class="rounded-full border border-line bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50" type="button">刷新一次</button>
             <span class="rounded-full bg-slate-100 px-2.5 py-1">龙一到龙五</span>
             <span class="rounded-full bg-slate-100 px-2.5 py-1">主板过滤</span>
           </div>
@@ -151,6 +151,23 @@
               <p id="selectedReason" class="mt-4 border-t border-line pt-4 text-sm leading-6 text-muted"></p>
               <div id="scoreGrid" class="mt-4 grid gap-3"></div>
             </div>
+            <div class="grid gap-3 border-t border-line p-4">
+              <div class="flex items-center justify-between gap-3">
+                <p class="text-sm font-semibold text-slate-950">胜率分析</p>
+                <button id="analyzeOdds" class="rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800" type="button">分析</button>
+              </div>
+              <div class="grid gap-2">
+                <label class="grid gap-1 text-xs text-muted">
+                  火山 API Key
+                  <input id="volcApiKey" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white" type="password" autocomplete="off" placeholder="本地输入，不写入数据文件">
+                </label>
+                <label class="grid gap-1 text-xs text-muted">
+                  模型 / Endpoint ID
+                  <input id="volcModel" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white" type="text" placeholder="ep-xxxxxxxx">
+                </label>
+              </div>
+              <div id="analysisResult" class="min-h-24 whitespace-pre-line rounded-md border border-line bg-slate-50 p-3 text-sm leading-6 text-slate-700">点击分析后调用火山接口。</div>
+            </div>
             <div class="grid gap-2 border-t border-line p-4 text-xs text-muted">
               <div class="flex items-center justify-between gap-3"><span>观察一</span><strong class="font-medium text-slate-700">是否继续放量</strong></div>
               <div class="flex items-center justify-between gap-3"><span>观察二</span><strong class="font-medium text-slate-700">板块是否扩散</strong></div>
@@ -166,6 +183,7 @@
   <script>
     const EXCLUDED_PREFIXES = ["300", "301", "688"];
     const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+    const VOLC_CHAT_COMPLETIONS_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
     const CLIENT_SECTOR_CONFIG = [
       {
         id: "mlcc",
@@ -241,6 +259,7 @@
     let activeSectorId = sectors[0]?.id;
     let mode = "trading";
     let selectedIndex = 0;
+    let activeAnalysisKey = "";
 
     const fmtPct = value => `${value > 0 ? "+" : ""}${Number(value || 0).toFixed(2)}%`;
     const fmtAmount = value => `${Number(value || 0).toFixed(1)}亿`;
@@ -392,7 +411,7 @@
           lastRefreshAt = Date.now();
           const refreshedAt = new Date();
           document.querySelector("#refreshStatus").textContent = `已刷新 ${formatTime(refreshedAt)}`;
-          document.querySelector("#tradeDate").textContent = `实时观察 · 最后刷新 ${formatDateTime(refreshedAt)} · 新浪行情 · 5分钟刷新`;
+          document.querySelector("#tradeDate").textContent = `实时观察 · 最后刷新 ${formatDateTime(refreshedAt)} · 新浪行情 · 手动刷新`;
           updateDataNotice("新浪行情/自维护股票池", window.SECTOR_DATA?.errors || []);
           render();
         }
@@ -407,6 +426,13 @@
         return sector.industry.map(name => byName[name]).filter(Boolean).slice(0, 5);
       }
       return [...sector.trading].sort((a, b) => score(b) - score(a)).slice(0, 5);
+    }
+
+    function selectedContext() {
+      const sector = sectors.find(item => item.id === activeSectorId) || sectors[0];
+      if (!sector) return {};
+      const stocks = rankedStocks(sector);
+      return { sector, stocks, stock: stocks[selectedIndex] || stocks[0] };
     }
 
     function filteredSectors() {
@@ -519,6 +545,11 @@
       document.querySelector("#selectedCode").textContent = `${selected.code} · ${mode === "trading" ? "交易强度" : "产业地位"}`;
       document.querySelector("#selectedReason").textContent = selected.reason || "";
       renderScoreGrid(selected);
+      const analysisKey = `${sector.id}-${selected.code}`;
+      if (analysisKey !== activeAnalysisKey) {
+        activeAnalysisKey = analysisKey;
+        document.querySelector("#analysisResult").textContent = "点击分析后调用火山接口。";
+      }
     }
 
     function render() {
@@ -571,12 +602,103 @@
       });
     }
 
+    function stockMetrics(stock) {
+      return [
+        `涨跌幅 ${fmtPct(stock.change)}`,
+        `成交额 ${fmtAmount(stock.amount)}`,
+        `换手率 ${Number(stock.turnover || 0).toFixed(1)}%`,
+        `市盈率 ${Number(stock.pe || 0) ? Number(stock.pe).toFixed(2) : "暂无"}`,
+        `市净率 ${Number(stock.pb || 0) ? Number(stock.pb).toFixed(2) : "暂无"}`,
+        `流通市值 ${Number(stock.marketCap || 0) ? fmtAmount(stock.marketCap) : "暂无"}`,
+        `现价 ${Number(stock.price || 0) ? Number(stock.price).toFixed(2) : "暂无"}`
+      ].join("，");
+    }
+
+    function buildAnalysisPrompt(sector, stocks, stock) {
+      const peers = stocks.map((item, index) => {
+        const rankName = ["龙一", "龙二", "龙三", "龙四", "龙五"][index] || `第${index + 1}`;
+        return `${rankName} ${item.name}(${item.code})：${stockMetrics(item)}`;
+      }).join("\n");
+      return [
+        `请分析 A 股短线博弈胜率。`,
+        `当前行业：${sector.name}`,
+        `行业涨跌幅：${fmtPct(sector.change)}，行业成交额：${fmtAmount(sector.amount)}，行业热度：${sector.heat || 0}`,
+        `目标股票：${stock.name}(${stock.code})`,
+        `目标数据：${stockMetrics(stock)}`,
+        `入选理由：${stock.reason || "暂无"}`,
+        `行业前五：\n${peers}`,
+        `请结合交易强度、市盈率、市净率、业绩可见度、基本面质量、行业强度和风险收益比给出结论。`,
+        `如果输入里没有业绩或基本面事实，请明确写“业绩/基本面：本地数据不足，需补充财报数据”，不要编造具体营收利润。`,
+        `输出固定包含：基本面分析、估值与业绩、市盈率/市净率评价、交易结构、风险点、博弈分数(0-100)、预估胜率(百分比)、是否值得博弈(值得/谨慎/不值得)、触发条件。`,
+        `这只是看盘辅助，不构成投资建议。`
+      ].join("\n");
+    }
+
+    async function analyzeOdds() {
+      const { sector, stocks, stock } = selectedContext();
+      const apiKey = document.querySelector("#volcApiKey").value.trim();
+      const model = document.querySelector("#volcModel").value.trim();
+      const result = document.querySelector("#analysisResult");
+      const button = document.querySelector("#analyzeOdds");
+      if (!sector || !stock) return;
+      if (!apiKey || !model) {
+        result.textContent = "请先输入火山 API Key 和模型 / Endpoint ID。";
+        return;
+      }
+      localStorage.setItem("volcModel", model);
+      result.textContent = "分析中...";
+      button.disabled = true;
+      button.className = "rounded-md bg-slate-400 px-2.5 py-1.5 text-xs font-medium text-white";
+      try {
+        const response = await fetch(VOLC_CHAT_COMPLETIONS_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            messages: [
+              {
+                role: "system",
+                content: "你是谨慎的A股交易与基本面分析助手。只基于用户给出的数据和明确常识做概率分析，不承诺收益，不给确定性买卖建议。"
+              },
+              {
+                role: "user",
+                content: buildAnalysisPrompt(sector, stocks, stock)
+              }
+            ]
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.error?.message || data?.message || `请求失败：${response.status}`);
+        }
+        result.textContent = data?.choices?.[0]?.message?.content || "接口没有返回分析内容。";
+      } catch (error) {
+        result.textContent = `分析失败：${error.message || error}`;
+      } finally {
+        button.disabled = false;
+        button.className = "rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800";
+      }
+    }
+
     const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
     document.querySelector("#tradeDate").textContent = `盘后观察 · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
     updateDataNotice(window.SECTOR_DATA?.source, window.SECTOR_DATA?.errors || []);
     document.querySelector("#search").addEventListener("input", renderSectors);
     document.querySelector("#sortBy").addEventListener("change", renderSectors);
+    document.querySelector("#refreshOnce").addEventListener("click", () => {
+      if (!canUseClientRefresh) {
+        document.querySelector("#refreshStatus").textContent = "请运行脚本刷新";
+        return;
+      }
+      refreshQuotes(true);
+    });
+    document.querySelector("#volcModel").value = localStorage.getItem("volcModel") || "";
+    document.querySelector("#analyzeOdds").addEventListener("click", analyzeOdds);
     document.querySelector("#modeTrading").addEventListener("click", () => {
       mode = "trading";
       selectedIndex = 0;
@@ -593,8 +715,6 @@
     });
 
     render();
-    refreshQuotes(true);
-    setInterval(() => refreshQuotes(false), 60 * 1000);
   </script>
 </body>
 </html>
