@@ -14,7 +14,7 @@ VENDOR = ROOT / "vendor"
 if VENDOR.exists():
     sys.path.insert(0, str(VENDOR))
 
-EXCLUDED_PREFIXES = ("300", "301", "688")
+MAIN_BOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
 TOP_INDUSTRY_COUNT = 5
 TOP_STOCK_COUNT = 5
 
@@ -114,7 +114,7 @@ def is_limit_up(code, change):
 
 
 def is_allowed_code(code):
-    return not str(code).zfill(6).startswith(EXCLUDED_PREFIXES)
+    return str(code).zfill(6).startswith(MAIN_BOARD_PREFIXES)
 
 
 def score(stock):

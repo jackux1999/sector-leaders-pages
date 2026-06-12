@@ -86,7 +86,7 @@
           <div>
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <h2 id="sectorTitle" class="text-base font-semibold tracking-normal text-slate-950"></h2>
-              <span class="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted">已排除创业板/科创板</span>
+              <span class="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted">仅沪深主板</span>
               <span id="refreshStatus" class="rounded-full border border-line bg-white px-2.5 py-1 text-xs text-muted">等待刷新</span>
             </div>
             <p id="sectorSummary" class="max-w-3xl text-sm leading-6 text-muted"></p>
@@ -179,9 +179,11 @@
     </div>
   </div>
 
-  <script src="data/sectors-data.js"></script>
   <script>
-    const EXCLUDED_PREFIXES = ["300", "301", "688"];
+    document.write(`<script src="data/sectors-data.js?v=${Date.now()}"><\/script>`);
+  </script>
+  <script>
+    const MAIN_BOARD_PREFIXES = ["000", "001", "002", "003", "600", "601", "603", "605"];
     const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
     const VOLC_CHAT_COMPLETIONS_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
     const CLIENT_SECTOR_CONFIG = [
@@ -245,9 +247,8 @@
       ? window.SECTOR_DATA.sectors
       : fallbackSectors;
     const dataSourceName = window.SECTOR_DATA?.source || "";
-    const canUseClientRefresh = !dataSourceName || dataSourceName.includes("新浪");
 
-    const allowedStock = stock => !EXCLUDED_PREFIXES.some(prefix => String(stock.code).padStart(6, "0").startsWith(prefix));
+    const allowedStock = stock => MAIN_BOARD_PREFIXES.some(prefix => String(stock.code).padStart(6, "0").startsWith(prefix));
     let sectors = rawSectors
       .map(sector => {
         const trading = (sector.trading || []).filter(allowedStock);
@@ -295,6 +296,7 @@
         change,
         amount: Number(parts[9] || 0) / 100000000,
         turnover: 0,
+        price: current,
         limit: change >= 9.8,
         date: parts[30] || "",
         time: parts[31] || "",
@@ -317,7 +319,7 @@
     function buildLiveSectors() {
       return CLIENT_SECTOR_CONFIG.map(config => {
         const stocks = config.stocks
-          .filter(code => !EXCLUDED_PREFIXES.some(prefix => String(code).startsWith(prefix)))
+          .filter(code => MAIN_BOARD_PREFIXES.some(prefix => String(code).padStart(6, "0").startsWith(prefix)))
           .map(code => parseSinaQuote(code))
           .filter(Boolean)
           .map(stock => ({
@@ -343,6 +345,36 @@
           industry: industry.slice(0, 5)
         };
       }).filter(sector => sector.trading.length);
+    }
+
+    function mergeLiveQuotes(quotes) {
+      sectors = sectors.map(sector => {
+        const trading = sector.trading.map(stock => {
+          const live = quotes[stock.code];
+          if (!live) return stock;
+          const merged = {
+            ...stock,
+            ...live,
+            change: Number(live.change.toFixed(2)),
+            amount: Number(live.amount.toFixed(2)),
+            turnover: Number(stock.turnover || live.turnover || 0),
+            pe: Number(stock.pe || 0),
+            pb: Number(stock.pb || 0),
+            marketCap: Number(stock.marketCap || 0),
+          };
+          merged.reason = quoteReason(merged, sector.name);
+          merged.industryScore = stock.industryScore || industryScore(merged, sector.industry || []);
+          return merged;
+        }).sort((a, b) => score(b) - score(a));
+        const leaders = trading.slice(0, 5);
+        return {
+          ...sector,
+          trading: leaders,
+          change: leaders.length ? Number((leaders.reduce((sum, stock) => sum + Number(stock.change || 0), 0) / leaders.length).toFixed(2)) : sector.change,
+          amount: Number(trading.reduce((sum, stock) => sum + Number(stock.amount || 0), 0).toFixed(1)),
+          heat: leaders.length ? Math.round(leaders.reduce((sum, stock) => sum + score(stock), 0) / leaders.length) : sector.heat
+        };
+      });
     }
 
     function loadSinaQuotes(codes) {
@@ -393,25 +425,44 @@
         (minutes >= 13 * 60 && minutes <= 15 * 60);
     }
 
+    function observationLabel(date = new Date()) {
+      const parts = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).formatToParts(date);
+      const value = type => parts.find(part => part.type === type)?.value || "";
+      if (["周六", "周日", "Sat", "Sun"].includes(value("weekday"))) return "非交易日观察";
+      const minutes = Number(value("hour")) * 60 + Number(value("minute"));
+      if (minutes < 9 * 60 + 30) return "盘前观察";
+      if (minutes <= 15 * 60) return "盘中观察";
+      return "盘后观察";
+    }
+
     let lastRefreshAt = 0;
     async function refreshQuotes(force = false) {
-      if (!canUseClientRefresh) return;
       const now = Date.now();
       if (!force && (!isTradingTime() || now - lastRefreshAt < REFRESH_INTERVAL_MS)) return;
-      const allCodes = [...new Set(CLIENT_SECTOR_CONFIG.flatMap(sector => sector.stocks))]
-        .filter(code => !EXCLUDED_PREFIXES.some(prefix => String(code).startsWith(prefix)));
+      const allCodes = [...new Set(sectors.flatMap(sector => sector.trading.map(stock => stock.code)))]
+        .filter(code => MAIN_BOARD_PREFIXES.some(prefix => String(code).padStart(6, "0").startsWith(prefix)));
+      if (!allCodes.length) return;
       document.querySelector("#refreshStatus").textContent = "刷新中";
       try {
         await loadSinaQuotes(allCodes);
-        const liveSectors = buildLiveSectors();
-        if (liveSectors.length) {
-          sectors = liveSectors;
+        const quotes = Object.fromEntries(allCodes.map(code => [String(code).padStart(6, "0"), parseSinaQuote(code)]).filter(([, quote]) => quote));
+        if (Object.keys(quotes).length) {
+          const selectedCode = selectedContext().stock?.code;
+          mergeLiveQuotes(quotes);
           if (!sectors.some(sector => sector.id === activeSectorId)) activeSectorId = sectors[0]?.id;
-          selectedIndex = 0;
+          const currentStocks = rankedStocks(sectors.find(item => item.id === activeSectorId) || sectors[0]);
+          const nextIndex = currentStocks.findIndex(stock => stock.code === selectedCode);
+          selectedIndex = nextIndex >= 0 ? nextIndex : 0;
           lastRefreshAt = Date.now();
           const refreshedAt = new Date();
           document.querySelector("#refreshStatus").textContent = `已刷新 ${formatTime(refreshedAt)}`;
-          document.querySelector("#tradeDate").textContent = `实时观察 · 最后刷新 ${formatDateTime(refreshedAt)} · 新浪行情 · 手动刷新`;
+          document.querySelector("#tradeDate").textContent = `${observationLabel(refreshedAt)} · 最后刷新 ${formatDateTime(refreshedAt)} · 新浪行情 · 手动刷新`;
           updateDataNotice("新浪行情/自维护股票池", window.SECTOR_DATA?.errors || []);
           render();
         }
@@ -567,11 +618,14 @@
       if (sourceText.includes("同花顺")) {
         warnings.push("当前为 AkShare/同花顺行业板块数据，自动取行业热度前五及各行业前五股票。");
       }
+      if (sourceText.includes("东方财富") || sourceText.includes("同花顺")) {
+        warnings.push("点击刷新一次会重新载入最新数据文件；若要重新筛选当天行业前五，请先运行 python3 generate-sector-data.py。");
+      }
       if (sourceText.includes("示例")) {
         warnings.push("当前展示示例数据，请运行脚本生成真实行情后再用于复盘。");
       }
       if (errors.length) {
-        warnings.push("数据源曾发生降级，请以页面显示的数据源为准。");
+        warnings.push("数据生成有提示，请以页面显示的数据源和行业列表为准。");
       }
       notice.textContent = warnings.length
         ? warnings.join(" ")
@@ -686,16 +740,13 @@
 
     const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
-    document.querySelector("#tradeDate").textContent = `盘后观察 · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
+    document.querySelector("#tradeDate").textContent = `${observationLabel()} · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
     updateDataNotice(window.SECTOR_DATA?.source, window.SECTOR_DATA?.errors || []);
     document.querySelector("#search").addEventListener("input", renderSectors);
     document.querySelector("#sortBy").addEventListener("change", renderSectors);
     document.querySelector("#refreshOnce").addEventListener("click", () => {
-      if (!canUseClientRefresh) {
-        document.querySelector("#refreshStatus").textContent = "请运行脚本刷新";
-        return;
-      }
-      refreshQuotes(true);
+      document.querySelector("#refreshStatus").textContent = "重新载入";
+      window.location.reload();
     });
     document.querySelector("#volcModel").value = localStorage.getItem("volcModel") || "";
     document.querySelector("#analyzeOdds").addEventListener("click", analyzeOdds);
