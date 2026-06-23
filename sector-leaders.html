@@ -761,6 +761,27 @@
       }
     }
 
+    function dateKey(date) {
+      const parts = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(date);
+      const value = type => parts.find(part => part.type === type)?.value || "";
+      return `${value("year")}-${value("month")}-${value("day")}`;
+    }
+
+    function maybeAutoRefreshStaleData() {
+      const today = dateKey(new Date());
+      const generatedDay = dateKey(generatedAt);
+      const autoRefreshKey = `autoRefreshTried:${today}`;
+      if (generatedDay === today || sessionStorage.getItem(autoRefreshKey)) return;
+      sessionStorage.setItem(autoRefreshKey, "1");
+      document.querySelector("#dataNotice").textContent = `当前数据日期为 ${generatedDay}，正在自动刷新到 ${today}。`;
+      refreshFromLocalServer();
+    }
+
     const generatedAt = window.SECTOR_DATA?.generatedAt ? new Date(window.SECTOR_DATA.generatedAt) : new Date();
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
     document.querySelector("#tradeDate").textContent = `${observationLabel()} · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
@@ -786,6 +807,7 @@
     });
 
     render();
+    maybeAutoRefreshStaleData();
   </script>
 </body>
 </html>
