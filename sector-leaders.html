@@ -41,30 +41,6 @@
           <span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-fall shadow-[0_0_0_6px_rgba(49,196,141,.12)]"></span>
         </div>
 
-        <section class="mb-4 grid gap-3 rounded-lg border border-line bg-white p-3 shadow-soft">
-          <label class="grid gap-1.5 text-xs text-muted">
-            搜索板块/股票
-            <input id="search" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white" type="search" placeholder="MLCC、锂电、机器人">
-          </label>
-
-          <div class="grid gap-1.5">
-            <span class="text-xs text-muted">龙头口径</span>
-            <div class="grid grid-cols-2 overflow-hidden rounded-md border border-line bg-slate-50 text-sm">
-              <button id="modeTrading" class="h-9 bg-slate-950 font-semibold text-white" type="button">交易</button>
-              <button id="modeIndustry" class="h-9 text-muted transition hover:bg-white hover:text-slate-950" type="button">产业</button>
-            </div>
-          </div>
-
-          <label class="grid gap-1.5 text-xs text-muted">
-            板块排序
-            <select id="sortBy" class="h-9 rounded-md border border-line bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white">
-              <option value="heat">综合热度</option>
-              <option value="change">今日涨幅</option>
-              <option value="amount">成交额</option>
-            </select>
-          </label>
-        </section>
-
         <nav id="sectorList" class="grid max-h-[44vh] gap-2 overflow-auto pr-1 lg:max-h-[calc(100vh-238px)]"></nav>
       </aside>
 
@@ -487,18 +463,7 @@
     }
 
     function filteredSectors() {
-      const term = document.querySelector("#search").value.trim().toLowerCase();
-      const sortBy = document.querySelector("#sortBy").value;
-      const sorted = [...sectors].sort((a, b) => {
-        if (sortBy === "change") return Number(b.change || 0) - Number(a.change || 0);
-        if (sortBy === "amount") return Number(b.amount || 0) - Number(a.amount || 0);
-        return Number(b.heat || 0) - Number(a.heat || 0);
-      });
-      if (!term) return sorted;
-      return sorted.filter(sector => {
-        const stocks = sector.trading.map(stock => `${stock.name}${stock.code}`).join("");
-        return `${sector.name}${stocks}`.toLowerCase().includes(term);
-      });
+      return [...sectors].sort((a, b) => Number(b.heat || 0) - Number(a.heat || 0));
     }
 
     function renderSectors() {
@@ -786,25 +751,9 @@
     const source = window.SECTOR_DATA?.source ? ` · ${window.SECTOR_DATA.source}` : " · 示例数据";
     document.querySelector("#tradeDate").textContent = `${observationLabel()} · 最后刷新 ${formatDateTime(generatedAt)}${source}`;
     updateDataNotice(window.SECTOR_DATA?.source, window.SECTOR_DATA?.errors || []);
-    document.querySelector("#search").addEventListener("input", renderSectors);
-    document.querySelector("#sortBy").addEventListener("change", renderSectors);
     document.querySelector("#refreshOnce").addEventListener("click", refreshFromLocalServer);
     document.querySelector("#volcModel").value = localStorage.getItem("volcModel") || "";
     document.querySelector("#analyzeOdds").addEventListener("click", analyzeOdds);
-    document.querySelector("#modeTrading").addEventListener("click", () => {
-      mode = "trading";
-      selectedIndex = 0;
-      document.querySelector("#modeTrading").className = "h-9 bg-slate-950 font-semibold text-white";
-      document.querySelector("#modeIndustry").className = "h-9 text-muted transition hover:bg-white hover:text-slate-950";
-      render();
-    });
-    document.querySelector("#modeIndustry").addEventListener("click", () => {
-      mode = "industry";
-      selectedIndex = 0;
-      document.querySelector("#modeIndustry").className = "h-9 bg-slate-950 font-semibold text-white";
-      document.querySelector("#modeTrading").className = "h-9 text-muted transition hover:bg-white hover:text-slate-950";
-      render();
-    });
 
     render();
     maybeAutoRefreshStaleData();
